@@ -1,0 +1,183 @@
+# 脑膜瘤的上游分析:lncRNA和mRNA转录组测序上游分析
+
+## 下机数据的完整性检测
+
+``
+1.txt 是下载的数据生成的md5值
+md5sum *fastq.gz > 1.txt
+md5.txt是公司给的
+md5sum -c md5.txt
+```
+
+## #fastp质检 
+
+```
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9;do
+  {
+  nohup fastp -w 8 -i /home/huoxulei/Desktop/meningiomaceRNA/rawdata/${i}.R1.fastq.gz -o /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R1.fastq.gz -I  /home/huoxulei/Desktop/meningiomaceRNA/rawdata/${i}.R2.fastq.gz -O /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R2.fastq.gz &
+  } 
+done
+
+```
+
+## 获取质检结果
+
+```
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9;do
+  {
+  nohup fastqc -t 10 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R1.fastq.gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R2.fastq.gz &
+  } 
+done
+
+for i in B1 B2 B3 B4;do
+  {
+   nohup fastqc -t 10 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_B_Clean_Data1.fq.gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_B_Clean_Data2.fq.gz &
+  } 
+done
+for i in M1 M2 M3 M4;do
+  {
+  nohup fastqc -t 10 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_M_Clean_Data1.fq.gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_M_Clean_Data2.fq.gz &
+  } 
+done
+合并 
+nohup multiqc . &
+```
+
+取出rRNA
+
+```
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9;do
+  {
+  nohup bowtie2 -x /home/huoxulei/Desktop/meningiomaceRNA/rRNA/hg38_rRNA -1 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R1.fastq.gz -2 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.clean_R2.fastq.gz   --un-conc-gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA_result.fastq.gz -p 8 -S /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA.sam 2>/home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.xls &
+  } 
+done
+for i in B1 B2 B3 B4;do
+  {
+  nohup bowtie2 -x /home/huoxulei/Desktop/meningiomaceRNA/rRNA/hg38_rRNA -1 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_B_Clean_Data1.fq.gz -2 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_B_Clean_Data2.fq.gz   --un-conc-gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA_result.fastq.gz -p 8 -S /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA.sam 2>/home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.xls &
+  } 
+done
+
+for i in M1 M2 M3 M4;do
+  {
+  nohup bowtie2 -x /home/huoxulei/Desktop/meningiomaceRNA/rRNA/hg38_rRNA -1 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_M_Clean_Data1.fq.gz -2 /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_M_Clean_Data2.fq.gz   --un-conc-gz /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA_result.fastq.gz -p 8 -S /home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}_rRNA.sam 2>/home/huoxulei/Desktop/meningiomaceRNA/cleandata/${i}.xls &
+  } 
+done
+
+```
+
+比对 hisat2 
+
+```
+##GRCH38_snp_trans 作为索引
+conda activate rna &&
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9 B1 B2 B3 B4 M1 M2 M3 M4;
+do
+  {
+  nohup hisat2 --dta -p 16 -x /home/huoxulei/Desktop/index/hisat/hg38_tran/genome_tran -1 /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}_rRNA_result.fastq.1.gz -2 /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}_rRNA_result.fastq.2.gz -S /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.sam 2>/home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.csv &
+  } 
+done
+
+for i in A7;
+do
+  {
+  nohup hisat2 --dta -p 16 -x /home/huoxulei/Desktop/index/hisat/hg38_tran/genome_tran -1 /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}_rRNA_result.fastq.1.gz -2 /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}_rRNA_result.fastq.2.gz -S /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.sam 2>/home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.csv &
+  } 
+done
+
+
+#但是这个时候 生成的sam文件 没法用于下面的stringtie分析，所以需转成bam，以及要进行排序 index是无作用的，对于分析
+conda activate rna &&
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9 B1 B2 B3 B4 M1 M2 M3 M4;
+do
+  {
+  nohup  samtools sort -@ 16 -o /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.bam /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.sam &
+  } 
+done
+
+for i in A7;
+do
+  {
+  nohup  samtools sort -@ 16 -o /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.bam /home/huoxulei/Desktop/meningiomaceRNA/mlnc/cleandata/${i}.sam &
+  } 
+done
+
+```
+
+##### stringtie获取结果/Assemble transcripts for each sample
+
+###### stringtie 不预测新的转录本 加-e  # 预测 对我来说 无意义 从gencode下的文件 要解压缩
+
+```
+conda activate rna &&
+for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9 B1 B2 B3 B4 M1 M2 M3 M4;
+do
+  {
+nohup  stringtie -e -p 10 -G /home/huoxulei/Desktop/index/hisat/hg38_tran/gencode.v38.annotation.gtf -o /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.gtf /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.bam &
+  } 
+done
+for i in A7;
+do
+  {
+nohup  stringtie -e -p 10 -G /home/huoxulei/Desktop/index/hisat/hg38_tran/gencode.v38.annotation.gtf -o /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.gtf /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.bam &
+  } 
+done
+
+
+cat A5.gtf|head
+
+```
+
+##### Merge transcripts from all samples:
+
+```
+nohup stringtie --merge -p 1- -G /home/huoxulei/Desktop/index/hisat/hg38_tran/gencode.v38.annotation.gtf -o stringtie_merged.gtf /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/mergelist.txt &
+```
+
+#Examine how the transcripts compare to the reference annotation (optional):
+
+```
+nohup gffcompare -r /home/huoxulei/Desktop/index/gtf/gencode.v38.chr_patch_hapl_scaff.basic.annotation.gtf -G -o merged /home/huoxulei/Desktop/meningiomaceRNA/bam/stringtie_merged.gtf &
+```
+
+#其中gffcompare.annotated.gtf存储的是StringTie组装的转录本与注释文件内的转录本的差别信息，通过class_code来表示：
+
+```javascript
+head merged.annotated.gtf |grep  class_code | cut -d ";" -f 5-8
+```
+
+#gffcmp.stats[文件存储](https://cloud.tencent.com/product/cfs?from=10680)比对结果的准确性和预测率。
+
+```javascript
+cat merged.stats
+```
+
+#将文件名的完整路径输入到一个文件中：
+
+```
+find /home/huoxulei/Desktop/meningiomaceRNA/ballow/ -name *.gtf > /home/huoxulei/Desktop/meningiomaceRNA/ballow/merglist.txt
+```
+
+#查看一下merglist.txt文件中的内容：
+
+```
+cat /home/huoxulei/Desktop/meningiomaceRNA/ballow/merglist.txt
+```
+
+expression level estimation
+
+```
+conda activate rna &&for i in A5 A6 A7 A8 A9 A10 A11 B5 B6 B7 B8 B9 M1 M2 M3 M4 B1 B2 B3 B4;do  {  nohup stringtie -e -B -p 10 -G /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/stringtie_merged.gtf -o /home/huoxulei/Desktop/meningiomaceRNA/mlnc/ballgown/E${i}/E${i}.gtf /home/huoxulei/Desktop/meningiomaceRNA/mlnc/bam/${i}.bam &  } done
+```
+
+count值
+
+```
+prepDE.py -i ballgown/ &
+```
+
+##### 截取一部分数据
+
+```text
+seqtk sample -s10 A7.fq 10000 > A71.fqseqtk sample -s100 A7.fq 10000 > A71.fq#以种子100取10000条序列
+```
+
